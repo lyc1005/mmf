@@ -314,9 +314,14 @@ class VisualBERTForClassification(nn.Module):
         self.dropout = nn.Dropout(self.bert.config.hidden_dropout_prob)
         if self.config.training_head_type == "nlvr2":
             self.bert.config.hidden_size *= 2
-        self.classifier = nn.Sequential(
-            BertPredictionHeadTransform(self.bert.config),
+#         self.classifier = nn.Sequential(
+#             BertPredictionHeadTransform(self.bert.config),
+#             nn.Linear(self.bert.config.hidden_size, self.config.num_labels),
+#         )
+        self.classifier = nn.ModuleList(
+            [BertPredictionHeadTransform(self.bert.config),
             nn.Linear(self.bert.config.hidden_size, self.config.num_labels),
+            nn.Linear(self.bert.config.hidden_size, 3),]
         )
 
         self.init_weights()
@@ -382,9 +387,25 @@ class VisualBERTForClassification(nn.Module):
             )
 
         pooled_output = self.dropout(pooled_output)
-        logits = self.classifier(pooled_output)
+        vector = self.classifier[0](pooled_output)
+        batch_size = vector.shape[0]
+        logits = self.classifier[1](vector)
         reshaped_logits = logits.contiguous().view(-1, self.num_labels)
         output_dict["scores"] = reshaped_logits
+        # get the difference of vector
+        for i in range(0,batch_size,2):
+            if i == 0:
+                new_vector = vector[i] - vector[i+1]
+                new_vector = new_vector.view(-1, 768)
+            else:
+                temp = vector[i] - vector[i+1]
+                temp = temp.view(-1, 768)
+                new_vector = torch.cat((new_vector, temp), 0)
+        
+        extra_logits = self.classifier[2](new_vector)
+        reshaped_extra_logits = extra_logits.contiguous().view(-1, 3)
+        output_dict["extra_logits"] = reshaped_extra_logits
+        # print(output_dict["extra_logits"])
         return output_dict
 
 
