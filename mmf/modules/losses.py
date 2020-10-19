@@ -569,4 +569,31 @@ class CrossEntropyLoss(nn.Module):
         self.loss_fn = nn.CrossEntropyLoss(**params)
 
     def forward(self, sample_list, model_output):
-        return self.loss_fn(model_output["scores"], sample_list.targets)
+        batch_size = sample_list.targets.shape[0]
+        
+        device = sample_list.targets.device
+        label0 = torch.LongTensor([0])
+        label1 = torch.LongTensor([1])
+        label2 = torch.LongTensor([2])
+        new_targets = None
+        for i in range(0, batch_size, 2):
+            if sample_list.targets[i] == sample_list.targets[i+1]:
+                if new_targets is None:
+                    new_targets = label1
+                else:
+                    new_targets = torch.cat((new_targets, label1))
+            else:
+                if sample_list.targets[i] == 1:
+                    if new_targets is None:
+                        new_targets = label0
+                    else:
+                        new_targets = torch.cat((new_targets, label0))
+                else:
+                    if new_targets is None:
+                        new_targets = label2
+                    else:
+                        new_targets = torch.cat((new_targets, label2))
+        new_targets = new_targets.to(device)
+        loss2 = self.loss_fn(model_output["extra_logits"], new_targets)
+        loss1 = self.loss_fn(model_output["scores"], sample_list.targets)
+        return loss1 + loss2
