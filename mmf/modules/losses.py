@@ -594,6 +594,6 @@ class CrossEntropyLoss(nn.Module):
                     else:
                         new_targets = torch.cat((new_targets, label2))
         new_targets = new_targets.to(device)
-        loss2 = self.loss_fn(model_output["extra_logits"], new_targets)
+        loss2 = self.loss_fn(model_output["extra_logits"], new_targets) # pair-wise loss
         loss1 = self.loss_fn(model_output["scores"], sample_list.targets)
         return loss1 + loss2
