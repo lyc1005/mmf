@@ -572,8 +572,6 @@ class CrossEntropyLoss(nn.Module):
         batch_size = sample_list.targets.shape[0]
         
         device = sample_list.targets.device
-        label0 = torch.LongTensor([0])
-        label1 = torch.LongTensor([1])
         
         left = sample_list.targets[0:batch_size:2]
         right = sample_list.targets[1:batch_size:2]
