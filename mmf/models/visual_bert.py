@@ -271,6 +271,7 @@ class VisualBERTForPretraining(nn.Module):
         return output_dict
 
 
+# code for visualbert
 class VisualBERTForClassification(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -314,15 +315,30 @@ class VisualBERTForClassification(nn.Module):
         self.dropout = nn.Dropout(self.bert.config.hidden_dropout_prob)
         if self.config.training_head_type == "nlvr2":
             self.bert.config.hidden_size *= 2
-#         self.classifier = nn.Sequential(
-#             BertPredictionHeadTransform(self.bert.config),
-#             nn.Linear(self.bert.config.hidden_size, self.config.num_labels),
-#         )
+        # # original classifier layer
+        # self.classifier = nn.Sequential(
+        #     BertPredictionHeadTransform(self.bert.config),
+        #     nn.Linear(self.bert.config.hidden_size, self.config.num_labels),
+        # )
         self.classifier = nn.ModuleList(
             [BertPredictionHeadTransform(self.bert.config),
             nn.Linear(self.bert.config.hidden_size, self.config.num_labels),
-            nn.Linear(self.bert.config.hidden_size, 3),]
+            nn.Linear(2*self.bert.config.hidden_size, 2),]
         )
+
+        # add the attention
+        self.attn1 = nn.MultiheadAttention(self.bert.config.hidden_size,
+                                        self.bert.config.num_attention_heads,
+                                        self.bert.config.attention_probs_dropout_prob)
+        self.attn2 = nn.MultiheadAttention(self.bert.config.hidden_size,
+                                        self.bert.config.num_attention_heads,
+                                        self.bert.config.attention_probs_dropout_prob)
+        self.fc = nn.Sequential(
+            nn.Linear(2*self.bert.config.hidden_size, self.bert.config.hidden_size),
+            nn.ReLU(),
+            nn.Dropout(self.bert.config.hidden_dropout_prob))
+        self.attn_pool = AttentionPool(self.bert.config.hidden_size,
+                                       self.bert.config.attention_probs_dropout_prob)
 
         self.init_weights()
 
@@ -385,28 +401,60 @@ class VisualBERTForClassification(nn.Module):
                 .unsqueeze(-1)
                 .expand(index_to_gather.size(0), 1, sequence_output.size(-1)),
             )
+        batch_size = sequence_output.shape[0]
+        left = sequence_output[:batch_size:2]
+        right = sequence_output[1:batch_size:2]
+        mask = attention_mask == 0
+        left_mask = mask[:batch_size:2]
+        right_mask = mask[1:batch_size:2]
+        left = left.transpose(0, 1)
+        right = right.transpose(0, 1)
+        l2r_attn, _ = self.attn1(left, right, right, key_padding_mask=right_mask)
+        r2l_attn, _ = self.attn2(right, left, left, key_padding_mask=left_mask)
+        # print(l2r_attn.shape, r2l_attn.shape)
+        left = self.fc(torch.cat([l2r_attn, left], dim=-1)).transpose(0, 1)
+        right = self.fc(torch.cat([r2l_attn, right], dim=-1)).transpose(0, 1)
+        # attention pooling and final prediction
+        left = self.attn_pool(left)
+        right = self.attn_pool(right)
+        extra_logits = self.classifier[2](
+          torch.cat([left, right], dim=-1))
+        # print(extra_logits.shape)
+        reshaped_extra_logits = extra_logits.contiguous().view(-1, 2)
+        output_dict["extra_logits"] = reshaped_extra_logits
 
         pooled_output = self.dropout(pooled_output)
+        # # original code for classifier
+        # logits = self.classifier(pooled_output)
+        # reshaped_logits = logits.contiguous().view(-1, self.num_labels)
+        # output_dict["scores"] = reshaped_logits
+        # return output_dict
+        # print(pooled_output.shape)
         vector = self.classifier[0](pooled_output)
-        batch_size = vector.shape[0]
         logits = self.classifier[1](vector)
         reshaped_logits = logits.contiguous().view(-1, self.num_labels)
         output_dict["scores"] = reshaped_logits
-        # get the difference of vector
-        for i in range(0,batch_size,2):
-            if i == 0:
-                new_vector = vector[i] - vector[i+1]
-                new_vector = new_vector.view(-1, 768)
-            else:
-                temp = vector[i] - vector[i+1]
-                temp = temp.view(-1, 768)
-                new_vector = torch.cat((new_vector, temp), 0)
         
-        extra_logits = self.classifier[2](new_vector)
-        reshaped_extra_logits = extra_logits.contiguous().view(-1, 3)
-        output_dict["extra_logits"] = reshaped_extra_logits
-        # print(output_dict["extra_logits"])
         return output_dict
+
+# code for attention pool
+
+class AttentionPool(nn.Module):
+    """ attention pooling layer """
+    def __init__(self, hidden_size, drop=0.0):
+        super().__init__()
+        self.fc = nn.Sequential(nn.Linear(hidden_size, 1), nn.ReLU())
+        self.dropout = nn.Dropout(drop)
+
+    def forward(self, input_, mask=None):
+        """input: [B, T, D], mask = [B, T]"""
+        score = self.fc(input_).squeeze(-1)
+        if mask is not None:
+            mask = mask.to(dtype=input_.dtype) * -1e4
+            score = score + mask
+        norm_score = self.dropout(nn.functional.softmax(score, dim=1))
+        output = norm_score.unsqueeze(1).matmul(input_).squeeze(1)
+        return output
 
 
 @registry.register_model("visual_bert")

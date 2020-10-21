@@ -574,26 +574,14 @@ class CrossEntropyLoss(nn.Module):
         device = sample_list.targets.device
         label0 = torch.LongTensor([0])
         label1 = torch.LongTensor([1])
-        label2 = torch.LongTensor([2])
-        new_targets = None
-        for i in range(0, batch_size, 2):
-            if sample_list.targets[i] == sample_list.targets[i+1]:
-                if new_targets is None:
-                    new_targets = label1
-                else:
-                    new_targets = torch.cat((new_targets, label1))
-            else:
-                if sample_list.targets[i] == 1:
-                    if new_targets is None:
-                        new_targets = label0
-                    else:
-                        new_targets = torch.cat((new_targets, label0))
-                else:
-                    if new_targets is None:
-                        new_targets = label2
-                    else:
-                        new_targets = torch.cat((new_targets, label2))
-        new_targets = new_targets.to(device)
+        
+        left = sample_list.targets[0:batch_size:2]
+        right = sample_list.targets[1:batch_size:2]
+        new_targets = left==right
+        new_targets = torch.cuda.LongTensor(new_targets.long())
+      
+        
         loss2 = self.loss_fn(model_output["extra_logits"], new_targets) # pair-wise loss
         loss1 = self.loss_fn(model_output["scores"], sample_list.targets)
-        return loss1 + loss2
+        
+        return loss1 #+ loss2
