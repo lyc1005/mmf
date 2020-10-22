@@ -322,7 +322,7 @@ class VisualBERTForClassification(nn.Module):
         # )
         self.classifier = nn.ModuleList(
             [BertPredictionHeadTransform(self.bert.config),
-            nn.Linear(self.bert.config.hidden_size, self.config.num_labels),
+            nn.Linear(3*self.bert.config.hidden_size, self.config.num_labels),
             nn.Linear(2*self.bert.config.hidden_size, 2),]
         )
 
@@ -431,10 +431,21 @@ class VisualBERTForClassification(nn.Module):
         # return output_dict
         # print(pooled_output.shape)
         vector = self.classifier[0](pooled_output)
-        logits = self.classifier[1](vector)
+        left_vector = vector[0:batch_size:2]
+        right_vector = vector[1:batch_size:2]
+        new_left_vector = torch.cat([left_vector, left+right, right_vector], dim=-1)
+        new_right_vector = torch.cat([right_vector, left+right, left_vector], dim=-1)
+        new_vector = torch.cuda.LongTensor()
+        for i in range(batch_size//2):
+            if i == 0:
+                new_vector = new_left_vector[i].view(1,-1)
+            else:
+                new_vector = torch.cat([new_vector, new_left_vector[i].view(1,-1)], dim=0)
+            new_vector = torch.cat([new_vector, new_right_vector[i].view(1,-1)], dim=0)
+
+        logits = self.classifier[1](new_vector)
         reshaped_logits = logits.contiguous().view(-1, self.num_labels)
         output_dict["scores"] = reshaped_logits
-        
         return output_dict
 
 # code for attention pool

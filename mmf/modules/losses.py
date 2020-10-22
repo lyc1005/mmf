@@ -582,4 +582,4 @@ class CrossEntropyLoss(nn.Module):
         loss2 = self.loss_fn(model_output["extra_logits"], new_targets) # pair-wise loss
         loss1 = self.loss_fn(model_output["scores"], sample_list.targets)
         
-        return loss1 #+ loss2
+        return loss1 + loss2
