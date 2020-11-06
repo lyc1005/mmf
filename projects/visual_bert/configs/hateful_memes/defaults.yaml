@@ -5,8 +5,7 @@ model_config:
   visual_bert:
     training_head_type: classification
     num_labels: 2
-    losses:
-    - cross_entropy
+    losses: [cross_entropy]
 
 dataset_config:
   hateful_memes:

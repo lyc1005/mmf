@@ -75,7 +75,8 @@ class Losses(nn.Module):
             self._evaluation_predict = config.get("evaluation", {}).get(
                 "predict", False
             )
-
+        if isinstance(loss_list, str):
+            loss_list = [loss_list]
         for loss in loss_list:
             self.losses.append(MMFLoss(loss))
 
@@ -155,8 +156,11 @@ class MMFLoss(nn.Module):
             loss_name = params
 
         self.name = loss_name
+        print(params) #
+        print(self.name) #
 
         loss_class = registry.get_loss_class(loss_name)
+        print(loss_class) #
 
         if loss_class is None:
             raise ValueError(f"No loss named {loss_name} is registered to registry")
@@ -562,6 +566,19 @@ class M4CDecodingBCEWithMaskLoss(nn.Module):
 
 @registry.register_loss("cross_entropy")
 class CrossEntropyLoss(nn.Module):
+    def __init__(self, params=None):
+        super().__init__()
+        if params is None:
+            params = {}
+        self.loss_fn = nn.CrossEntropyLoss(**params)
+
+    def forward(self, sample_list, model_output):
+        loss1 = self.loss_fn(model_output["scores"], sample_list.targets)
+        return loss1
+
+
+@registry.register_loss("pair_wise_cross_entropy")
+class PairWiseCrossEntropyLoss(nn.Module):
     def __init__(self, params=None):
         super().__init__()
         if params is None:
