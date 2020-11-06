@@ -156,11 +156,8 @@ class MMFLoss(nn.Module):
             loss_name = params
 
         self.name = loss_name
-        print(params) #
-        print(self.name) #
 
         loss_class = registry.get_loss_class(loss_name)
-        print(loss_class) #
 
         if loss_class is None:
             raise ValueError(f"No loss named {loss_name} is registered to registry")

@@ -151,7 +151,7 @@ def build_dataloader_and_sampler(
     # to the codebase
     if not isinstance(dataset_instance, torch.utils.data.IterableDataset):
         other_args = _add_extra_args_for_dataloader(dataset_instance, other_args)
-
+    other_args['shuffle'] = training.shuffle
     loader = torch.utils.data.DataLoader(
         dataset=dataset_instance,
         pin_memory=pin_memory,
