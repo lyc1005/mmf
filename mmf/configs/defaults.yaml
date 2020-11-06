@@ -3,7 +3,6 @@ config_version: 1.0
 
 # Configuration for training
 training:
-    shuffle: true
     # Name of the trainer class used to define the training/evalution loop
     trainer: mmf
     # Seed to be used for training. -1 means random seed between 1 and 100000.
@@ -56,6 +55,7 @@ training:
     dataset_size_proportional_sampling: true
     # Whether to pin memory in dataloader
     pin_memory: false
+    shuffle: true
 
     # After `checkpoint_interval` iterations, MMF will make a snapshot
     # which will involve creating a checkpoint for current training scenarios
